@@ -36,6 +36,17 @@ let detector, camera, stats;
 let startInferenceTime, numInferences = 0;
 let inferenceTimeSum = 0, lastPanelUpdate = 0;
 let rafId;
+let lst = Date.now();
+let angles = [0,0,0,0,0];
+let mqttclient = new Paho.MQTT.Client( '192.168.8.109', 9001, 'clientId');
+
+  // called when the client connects
+  function onConnect() {
+    // Once a connection has been made, make a subscription and send a message.
+    console.log('onConnect');
+}
+
+mqttclient.connect({onSuccess: onConnect});
 
 async function createDetector() {
   switch (STATE.model) {
@@ -150,6 +161,78 @@ async function renderResult() {
   // which shouldn't be rendered.
   if (hands && hands.length > 0 && !STATE.isModelChanged) {
     camera.drawResults(hands);
+
+    let x0 = hands[0].keypoints3D[0].x;
+    let x8 = hands[0].keypoints3D[8].x;
+    let dx = x8 - x0;
+
+    let y0 = hands[0].keypoints3D[0].y;
+    let y8 = hands[0].keypoints3D[8].y;
+    let dy = y8 - y0;
+
+    let z0 = hands[0].keypoints3D[0].z;
+    let z8 = hands[0].keypoints3D[8].z;
+    let dz = z8 - z0;
+
+    let now = Date.now();
+
+    if ( now - lst > 1500) {
+      if ( dx < -0.02 ) {
+        angles[2] -= 0;
+      }
+      else if (dx > 0.02) {
+        angles[2] += 0;
+      }
+
+      if ( dy < -0.02 ) {
+        angles[4] -= 0;
+      }
+      else if (dy > 0.02) {
+        angles[4] += 0;
+      }
+
+      let json = {
+        'command' : 'set_angles',
+        'angles' : angles,
+      };
+
+      console.log( 'Angles : ' + JSON.stringify( json));
+
+
+      let l = Math.sqrt( dx*dx + dy*dy);
+      let nx = dx / l;
+      let ny = dy / l;
+
+      let r = (Math.acos( ny) * 180 / 3.1415926) - 180;
+
+
+      let l2 = Math.sqrt( dz*dz + dy*dy);
+      let nx2 = dz / l2;
+      let ny2 = dy / l2;
+
+      let r2 = (Math.acos( ny2) * 180 / 3.1415926) - 180;
+
+
+
+
+
+      if ( nx > 0) {
+        r = -r;
+      }
+
+      if ( nx2 > 0) {
+        r2 = -r2;
+      }
+
+      console.log( 'DX: ' + dx + ' DY: ' + dy + ' DZ: ' + dz + ' Angle : ' + r + ' Angle2 : ' + r2);
+
+      angles[0] = r*1.5;
+      angles[4] = r2*2.5;
+
+      mqttclient.send( 'command', JSON.stringify( json), 0, false);
+
+      lst = now;
+    }
   }
 }
 
